@@ -4,26 +4,29 @@
  * @date 2014-09-09
  */
 
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <grp.h>
 #include <dirent.h>
 #include <string.h>
+#include <pwd.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef struct myls_struct {
-    char perms[10];
+    char *perms;
+    char *owner;
+    char *group;
+    off_t size;
 } myls_struct;
 
-char* perms(char *path) {
+char* perms(struct stat *lstat_r) {
     char *result = malloc(10 * sizeof(char));
     strcpy(result, "----------");
-    struct stat lstat_r;
-    lstat(path, &lstat_r);
 
-    switch (lstat_r.st_mode & S_IFMT) {
+    switch (lstat_r->st_mode & S_IFMT) {
         case S_IFREG:
             break;
         case S_IFDIR:
@@ -33,39 +36,62 @@ char* perms(char *path) {
             result[0] = 'l';
             break;
         default:
-            fputs("Could not determine file type for ", stderr);
-            fputs(path, stderr);
-            printf("%d", lstat_r.st_mode);
-            fputs("\n", stderr);
+            fputs("Could not determine file type", stderr);
             exit(1);
     }
+
+    result[1] = (lstat_r->st_mode & S_IRUSR) ? 'r' : '-';
+    result[2] = (lstat_r->st_mode & S_IWUSR) ? 'w' : '-';
+    result[3] = (lstat_r->st_mode & S_IXUSR) ? 'x' : '-'; 
+    result[4] = (lstat_r->st_mode & S_IRGRP) ? 'r' : '-';
+    result[5] = (lstat_r->st_mode & S_IWGRP) ? 'w' : '-';
+    result[6] = (lstat_r->st_mode & S_IXGRP) ? 'x' : '-';
+    result[7] = (lstat_r->st_mode & S_IROTH) ? 'r' : '-';
+    result[8] = (lstat_r->st_mode & S_IWOTH) ? 'w' : '-';
+    result[9] = (lstat_r->st_mode & S_IXOTH) ? 'x' : '-';
 
     return result;
 }
 
+char* owner(struct stat *lstat_r) {
+    struct passwd *usr = getpwuid(lstat_r->st_uid);
+    return usr->pw_name;
+}
+
+char* group(struct stat *lstat_r) {
+    struct group *grp = getgrgid(lstat_r->st_gid);
+    return grp->gr_name;
+}
+
+off_t size(struct stat *lstat_r) {
+    return lstat_r->st_size;
+}
+
+char* datetime(struct stat *lstat_r) {
+
+}
+
 myls_struct* getstruct(char *full_path) {
+    struct stat lstat_r;
+    if (lstat(full_path, &lstat_r) != 0) {
+        fputs("Could not stat file ", stderr);
+        fputs(full_path, stderr);
+    }
+
     struct myls_struct *str= malloc(sizeof(myls_struct));
-    strncpy(str->perms, perms(full_path), 10);
+    str->perms = perms(&lstat_r);
+    str->owner = owner(&lstat_r);
+    str->group = group(&lstat_r);
+    str->size = size(&lstat_r);
 
     return str;
 }
 
-void fmt(char *directory, struct dirent *p_dirent) {
-     printf("Directory: %s\n", directory);
-    //printf("%s %s\n", directory, p_dirent->d_name);
-    char *full_path = malloc(PATH_MAX * sizeof(char));
-    strcat(full_path, directory);
-    strcat(full_path, "/");
-    strcat(full_path, p_dirent->d_name);
+void fmt(struct dirent *p_dirent) {
+    struct myls_struct *cols = getstruct(p_dirent->d_name);
 
-
-    printf("%s\n", full_path);
-
-    free(full_path);
-    
-//    struct myls_struct *cols = getstruct(full_path);
-//    printf("%s %s\n", cols->perms, p_dirent->d_name);
-//    free(cols);
+    printf("%s %s %s %d %s\n", cols->perms, cols->owner, cols->group, (int)cols->size, p_dirent->d_name);
+    free(cols);
 }
 
 int main(int argc, char *argv[]) {
@@ -95,9 +121,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    if (chdir(directory) != 0) {
+        fputs("failed to change directory '", stderr);
+        fputs(directory, stderr);
+        fputs("'\n", stderr);
+        return 1;
+    }
+
     struct dirent *directory_entry;
     while ((directory_entry = readdir(directory_h)) != NULL) {
-        fmt(directory, directory_entry);
+        fmt(directory_entry);
     }
 
     return 0;
