@@ -23,6 +23,7 @@ typedef struct myls_struct {
     char *group;
     off_t size;
     char *datetime;
+    char *filename;
 } myls_struct;
 
 char* perms(struct stat *lstat_r) {
@@ -105,11 +106,27 @@ char* datetime(struct stat *lstat_r) {
     return value;
 }
 
-myls_struct* getstruct(char *full_path) {
+char* filename(struct stat *lstat_r, char *path) {
+    int val = PATH_MAX * sizeof(char);
+    char *value = malloc(2 * val);
+    char real_path[val];
+
+    strcat(value, path);
+
+    if (S_ISLNK(lstat_r->st_mode)) {
+        strcat(value, " -> ");
+        readlink(path, real_path, val);
+        strcat(value, real_path);
+    }
+
+    return value;
+}
+
+myls_struct* getstruct(char *path) {
     struct stat lstat_r;
-    if (lstat(full_path, &lstat_r) != 0) {
+    if (lstat(path, &lstat_r) != 0) {
         fputs("Could not stat file ", stderr);
-        fputs(full_path, stderr);
+        fputs(path, stderr);
     }
 
     struct myls_struct *str= malloc(sizeof(myls_struct));
@@ -118,6 +135,7 @@ myls_struct* getstruct(char *full_path) {
     str->group = group(&lstat_r);
     str->size = size(&lstat_r);
     str->datetime = datetime(&lstat_r);
+    str->filename = filename(&lstat_r, path);
 
     return str;
 }
@@ -126,7 +144,7 @@ myls_struct* getstruct(char *full_path) {
 void fmt(struct dirent *p_dirent) {
     struct myls_struct *cols = getstruct(p_dirent->d_name);
 
-    printf("%s\t%s\t%s\t%d\t%s\t%s\n", cols->perms, cols->owner, cols->group, (int)cols->size, cols->datetime, p_dirent->d_name);
+    printf("%s\t%s\t%s\t%d\t%s\t%s\n", cols->perms, cols->owner, cols->group, (int)cols->size, cols->datetime, cols->filename);
     free(cols);
 }
 
