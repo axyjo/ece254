@@ -15,11 +15,14 @@
 #include <time.h>
 #include <unistd.h>
 
+int dir_option = 0;
+
 typedef struct myls_struct {
     char *perms;
     char *owner;
     char *group;
     off_t size;
+    char *datetime;
 } myls_struct;
 
 char* perms(struct stat *lstat_r) {
@@ -68,7 +71,14 @@ off_t size(struct stat *lstat_r) {
 }
 
 char* datetime(struct stat *lstat_r) {
+    char *value = malloc(13 * sizeof(char));
+
     time_t file_time;
+    time_t real_time = time(NULL);
+    
+    struct tm broken_real_time;
+    struct tm broken_file_time;
+
     if (dir_option == 1) {
         file_time = lstat_r->st_atime;
     } else if (dir_option == 2) {
@@ -80,13 +90,19 @@ char* datetime(struct stat *lstat_r) {
         exit(1);
     }
 
-    time_t real_time = time();
-    tm broken_real_time = localtime(&real_time);
-    tm broken_file_time = localtime(&file_time);
-
-    int real_year = broken_real_time.tm_year;
+    localtime_r(&file_time, &broken_file_time);
     int file_year = broken_file_time.tm_year;
     
+    localtime_r(&real_time, &broken_real_time);
+    int real_year = broken_real_time.tm_year;
+
+    if (real_year == file_year) {
+        strftime(value, 13, "%b %e %H:%M", &broken_file_time);
+    } else {
+        strftime(value, 13, "%b %e  %Y", &broken_file_time);
+    }
+
+    return value;
 }
 
 myls_struct* getstruct(char *full_path) {
@@ -101,18 +117,18 @@ myls_struct* getstruct(char *full_path) {
     str->owner = owner(&lstat_r);
     str->group = group(&lstat_r);
     str->size = size(&lstat_r);
+    str->datetime = datetime(&lstat_r);
 
     return str;
 }
 
+
 void fmt(struct dirent *p_dirent) {
     struct myls_struct *cols = getstruct(p_dirent->d_name);
 
-    printf("%s %s %s %d %s\n", cols->perms, cols->owner, cols->group, (int)cols->size, p_dirent->d_name);
+    printf("%s\t%s\t%s\t%d\t%s\t%s\n", cols->perms, cols->owner, cols->group, (int)cols->size, cols->datetime, p_dirent->d_name);
     free(cols);
 }
-
-int dir_option = 0;
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
