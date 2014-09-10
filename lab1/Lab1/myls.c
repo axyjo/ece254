@@ -68,7 +68,25 @@ off_t size(struct stat *lstat_r) {
 }
 
 char* datetime(struct stat *lstat_r) {
+    time_t file_time;
+    if (dir_option == 1) {
+        file_time = lstat_r->st_atime;
+    } else if (dir_option == 2) {
+        file_time = lstat_r->st_ctime;
+    } else if (dir_option == 4) {
+        file_time = lstat_r->st_mtime;
+    } else {
+        fputs("DIE A HORRIBLE DEATH.\n", stderr);
+        exit(1);
+    }
 
+    time_t real_time = time();
+    tm broken_real_time = localtime(&real_time);
+    tm broken_file_time = localtime(&file_time);
+
+    int real_year = broken_real_time.tm_year;
+    int file_year = broken_file_time.tm_year;
+    
 }
 
 myls_struct* getstruct(char *full_path) {
@@ -94,6 +112,8 @@ void fmt(struct dirent *p_dirent) {
     free(cols);
 }
 
+int dir_option = 0;
+
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         fputs("ERROR: incorrect number of arguments\n", stderr);
@@ -105,8 +125,11 @@ int main(int argc, char *argv[]) {
     char *directory = argv[2];
 
     if (strcmp(option, "-u") == 0) {
+        dir_option = 1;
     } else if (strcmp(option, "-c") == 0) {
+        dir_option = 2;
     } else if (strcmp(option, "-l") == 0) {
+        dir_option = 4;
     } else {
         fputs("ERROR: invalid argument for OPTION\n", stderr);
         fputs("Valid options: -u, -c, -l\n", stderr);
