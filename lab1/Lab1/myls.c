@@ -1,5 +1,6 @@
 /**
  * ECE 254 Lab 1
+ * @author Akshay Budhkar <abudhkar@uwaterloo.ca>
  * @author Akshay Joshi <a24joshi@uwaterloo.ca>
  * @date 2014-09-09
  */
