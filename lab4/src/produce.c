@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 
     // print the initialization and data transmission times
     printf("Time to initialize system: %f seconds\n", computeTime(&setup, &start));
-    printf("Time to transmit data: %f seconds\n", computeTime(&complete, &start));
+    printf("Time to transmit data: %f seconds\n", computeTime(&complete, &setup));
 
     return 0;
 }
