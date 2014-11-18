@@ -8,23 +8,27 @@
 #include <math.h>
 
 mqd_t qdes;
-sem_t * mayConsume; 
-sem_t * mayProduce;
-sem_t * valuesRemaining;
+sem_t * mayConsume; // named semaphore for consumer
+sem_t * mayProduce; // named semaphore for producer
+sem_t * valuesRemaining; // named semaphore for values remaming
+
 int consume(int id) {
+    // while there are items in the message queue, try to consume them
     while (sem_trywait(valuesRemaining) == 0) {
+        // decrease the consumer semaphore
         sem_wait(mayConsume);
         int item;
         // try to remove the oldest item in the queue
         if (mq_receive(qdes, (char *)&item, sizeof(int), NULL) == -1) {
             perror("mq_receive() failed");
         }
-
+        
+        // do some math the check if item is perfect square
         double root = sqrt(item);
         if (root == floor(root)) {
             printf("%d %d %d\n", id, item, (int)root);
         }
-
+        // increase the producer semaphore
         sem_post(mayProduce);
     }
 
@@ -41,6 +45,7 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    // open the consumer, producer and values remaining semaphores
     mayConsume = sem_open("/semc_a24joshi", 0);
     mayProduce = sem_open("/semp_a24joshi", 0);
     valuesRemaining = sem_open("/semt_a24joshi", 0);
@@ -54,6 +59,7 @@ int main(int argc, char *argv[]) {
         exit(2);
     }
 
+    // close all the semaphores
     sem_close(mayConsume);
     sem_close(mayProduce);
     sem_close(valuesRemaining);
