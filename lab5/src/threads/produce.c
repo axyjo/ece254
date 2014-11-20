@@ -1,7 +1,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <mqueue.h>
 #include <math.h>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -10,12 +9,13 @@
 #include <unistd.h>
 #include <time.h>
 
-mqd_t qdes; // the message queue to send and receive numbers
-pthread_mutex_t buffer; // mutex for the message queue
+pthread_mutex_t bufferMutex; // mutex for the message queue
 pthread_mutex_t numConsumedMutex; // mutex for the consumers
 sem_t mayProduce, mayConsume; // unnamed semaphores
 int numConsumed;
 int numProducers, numConsumers, total;
+int* buffer;
+int bufferPosition = 0;
 
 // Used by the consumers to consume a given item
 void* consume(void *id_pointer) {
@@ -25,19 +25,13 @@ void* consume(void *id_pointer) {
         if (sem_trywait(&mayConsume) == -1) {
             continue;
         }
-        pthread_mutex_lock(&buffer);
-        int item;
-        // try to consume the given item from the message queue
-        if (mq_receive(qdes, (char *)&item, sizeof(int), NULL) == -1) {
-            perror("mq_receive() failed");
-            pthread_mutex_unlock(&buffer);
-            break;
-        }
+        pthread_mutex_lock(&bufferMutex);
+        int item = buffer[bufferPosition--];
         // if successful in consuming an item
         pthread_mutex_lock(&numConsumedMutex);
         numConsumed++;
         pthread_mutex_unlock(&numConsumedMutex);
-        pthread_mutex_unlock(&buffer);
+        pthread_mutex_unlock(&bufferMutex);
         sem_post(&mayProduce);
 
         // do some math to check if item is perfect square
@@ -57,12 +51,10 @@ void* produce(void *id_pointer) {
     // produce items in steps of the number of producers
     for (i = id; i < total; i = i + numProducers) {
         sem_wait(&mayProduce);
-        pthread_mutex_lock(&buffer);
+        pthread_mutex_lock(&bufferMutex);
         // try to add items to the message queue
-        if (mq_send(qdes, (char *)&i, sizeof(int), 0) == -1) {
-            perror("mq_produce() failed");
-        }
-        pthread_mutex_unlock(&buffer);
+        buffer[++bufferPosition] = i;
+        pthread_mutex_unlock(&bufferMutex);
         sem_post(&mayConsume);
     }
 
@@ -81,11 +73,6 @@ int main(int argc, char *argv[]) {
     struct timezone tz;
     gettimeofday(&start, &tz);
 
-    char *qname = "/a24joshi_mqueue";
-    int oflag = O_RDWR | O_CREAT;
-    mode_t mode = S_IRUSR | S_IWUSR;
-    struct mq_attr attr;
-
     // check for valid number of arguments
     if ( argc !=5 ) {
         printf("Usage: %s <N> <B> <P> <C>\n", argv[0]);
@@ -96,24 +83,11 @@ int main(int argc, char *argv[]) {
     total = atoi(argv[1]);
     // initialize the semaphore with number of producers as the initial value
     sem_init(&mayProduce, 0, atoi(argv[2]));
+    buffer = calloc(atoi(argv[2]), sizeof(int));
     numProducers = atoi(argv[3]);
     numConsumers = atoi(argv[4]);
     // initialize the semaphore with zero as the initial value
     sem_init(&mayConsume, 0, 0);
-
-    // Set the queue attributes
-    attr.mq_maxmsg  = atoi(argv[2]);
-    attr.mq_msgsize = sizeof(int);
-    attr.mq_flags   = 0;            /* a blocking queue  */
-
-    // create the queue with the given queue name and attributes
-    qdes  = mq_open(qname, oflag, mode, &attr);
-
-    // check if creating the queue was successful
-    if (qdes == -1 ) {
-        perror("mq_open() failed");
-        exit(1);
-    }
 
     // an array of threads of size equal to total number of producers and consumers
     pthread_t threads[numProducers + numConsumers];
@@ -123,7 +97,7 @@ int main(int argc, char *argv[]) {
     int i;
 
     numConsumed = 0;
-    pthread_mutex_init(&buffer, NULL);
+    pthread_mutex_init(&bufferMutex, NULL);
     pthread_mutex_init(&numConsumedMutex, NULL);
 
     // Create threads for producers, calling produce for every producer while passing the id as a parameter
@@ -143,22 +117,13 @@ int main(int argc, char *argv[]) {
         pthread_join(threads[i], NULL);
     }
 
-    // try to close the queue
-    if (mq_close(qdes) == -1) {
-        perror("mq_close() failed");
-        exit(2);
-    }
-
-    // try to remove the queue
-    if (mq_unlink(qname) != 0) {
-        perror("mq_unlink() failed");
-        exit(3);
-    }
-
     gettimeofday(&complete, &tz);
+
+    free(buffer);
 
     // print the initialization and data transmission times
     printf("System execution time: %f seconds\n", computeTime(&complete, &start));
+
 
     return 0;
 }
