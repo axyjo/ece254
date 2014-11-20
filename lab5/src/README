@@ -1,0 +1,10 @@
+ECE 254 Lab 4
+-------------
+abudhkar/a24joshi
+
+Inter thread communication
+To build this project, run `make all` in the src/threads directory.
+
+
+Inter process communication
+To build this project, run `make all` in the src/processes directory.
